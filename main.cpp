@@ -34,6 +34,7 @@
 #include "local_ip.hpp"
 #include "split_string.hpp"
 #include "os_screen_help.hpp"
+#include "load_file.hpp"
 
 #define PORT 80
 #define MAX_POLL_CLIENTS 5
@@ -108,13 +109,9 @@ void handle_client() {
     lastSpace[0] = (char)NULL;
     firstSpace++;
 
-    char filepath[500] = { 0 };
-    strcpy(filepath, "fs:/vol/external01");
-    strcat(filepath, firstSpace);
+    fileResponseStruct_t fileRes = read_file(firstSpace);
 
-    FILE *fptr = fopen(filepath, "r");
-
-    if (fptr == NULL) { // file could not be opened
+    if (fileRes.read_fail) {
         char* head = http_response_head_builder(400,"text/html");
 
         sprintf(res, "%s\n\n%s\n\n", head, HTTP_Not_Found_Res);
@@ -125,22 +122,19 @@ void handle_client() {
         free(res);
         free(req);
         free(head);
+        free(fileRes.data);
         connections++;
         return;
     }
 
     char* head = http_response_head_builder(200,"text/html");
-
-    char myString[100]; 
-    fgets(myString, 100, fptr);
-
-    sprintf(res, "%s\n\n%s\n\n", head, myString);
+    sprintf(res, "%s\n\n%s\n\n", head, fileRes.data);
 
     write(client, res, strlen(res));
 
     close(client);
-    fclose(fptr);
 
+    free(fileRes.data);
     free(res);
     free(req);
     free(head);
@@ -214,7 +208,7 @@ int initSocket() {
 
     if (listen(server_fd, 3) < 0) return 1;
 
-    // set socket to non blocking if we have that enabled
+    // set socket to non blocking if we have that enabled (broken...)
     if (SOCKET_NONBLOCK) {
         int flags = fcntl(server_fd, F_GETFL, 0);  // Get the current flags of the socket
         if (flags == -1) {

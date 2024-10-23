@@ -7,7 +7,8 @@ add_executable(helloworld_cpp
    main.cpp
    local_ip.cpp
    split_string.cpp
-   os_screen_help.cpp)
+   os_screen_help.cpp
+   load_file.cpp)
 
 wut_create_rpx(helloworld_cpp)
 
