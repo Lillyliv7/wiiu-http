@@ -15,7 +15,6 @@
 #include <whb/log_udp.h>
 #include <whb/proc.h>
 #include <sysapp/launch.h>
-#include <nn/ac.h>
 #include <arpa/inet.h>
 #include <netinet/in.h>
 #include <stdlib.h>
@@ -25,33 +24,32 @@
 #include <unistd.h>
 #include <poll.h>
 #include <errno.h>
+#include <dirent.h>
 
 #include <thread>
 #include <vector>
 #include <map>
+#include <string>
+
+#include "local_ip.hpp"
+#include "split_string.hpp"
+#include "os_screen_help.hpp"
 
 #define PORT 80
 #define MAX_POLL_CLIENTS 5
 #define SOCKET_NONBLOCK false
 #define SERVER_IDENTIFIER "Server: LillyHTTP/0.1 (Wii U/CafeOS)\n"
 
-struct clientStruct {
-    int client_fd;
-    struct sockaddr_in client_address;
-    socklen_t client_addrlen;
-}; typedef struct clientStruct clientStruct_t;
+// struct clientStruct {
+//     int client_fd;
+//     struct sockaddr_in client_address;
+//     socklen_t client_addrlen;
+// }; typedef struct clientStruct clientStruct_t;
 
 // std::vector<clientStruct_t> clients;
 
-size_t tvBufferSize;
-size_t padBufferSize;
-void* tvBuf;
-void* padBuf;
 
 bool shouldStopThread = false;
-
-uint32_t local_ip;
-char* local_ip_string;
 
 int server_fd;
 unsigned long connections = 0;
@@ -61,48 +59,7 @@ bool flags_err = false;
 bool poll_err = false;
 socklen_t addrlen = sizeof(address);
 
-const char* HTTP_Res_Server_failure = "HTTP/1.1 500 Internal Server Error\n"
-                                    "Content-Type: text/html\n"
-                                    "Content-Length:54\n\n"
-                                    "<h1>LillyHTTP Response 500 Internal Server Error</h1>\n";
-
-void init_buffers ( void ) {
-    tvBufferSize = OSScreenGetBufferSizeEx(SCREEN_TV);
-    padBufferSize = OSScreenGetBufferSizeEx(SCREEN_DRC);
-
-    WHBLogPrintf("Allocating 0x%X bytes for TV graphics and 0x%X bytes for Gamepad graphics", tvBufferSize, padBufferSize);
-
-    tvBuf = memalign(0x100, tvBufferSize); // allocate tv and gamepad buffers aligned to 0x100 bytes
-    padBuf = memalign(0x100, padBufferSize);
-
-    if (!tvBuf || !padBuf) { 
-        // failed to allocate memory, likely because of no free memory left 
-        // (turn off some aroma plugins or something!)
-        WHBLogPrintf("Out of memory! Failed to allocate 0x%X bytes", tvBufferSize+padBufferSize);
-
-        if (padBuf) free(padBuf);
-        if (tvBuf) free(tvBuf);
-
-        OSScreenShutdown();
-
-        WHBLogPrint("Quitting with error");
-        WHBLogCafeDeinit();
-        WHBLogUdpDeinit();
-
-        WHBProcShutdown();
-
-        return;
-    }
-
-    WHBLogPrintf("Successfully allocated 0x%X bytes for graphics", tvBufferSize+padBufferSize);
-
-    // buffers are set up, now bind them
-
-    OSScreenSetBufferEx(SCREEN_TV, tvBuf);
-    OSScreenSetBufferEx(SCREEN_DRC, padBuf);
-    OSScreenEnableEx(SCREEN_TV, true);
-    OSScreenEnableEx(SCREEN_DRC, true);
-}
+const char* HTTP_Not_Found_Res = "404 NOT FOUND!\n";
 
 // last http response to print to console
 char lastRes[1000] = { 0 };
@@ -113,6 +70,8 @@ char* http_response_head_builder(int resCode, const char *content_type) {
 
     if (resCode == 200) {
         strcpy(httpHeader, "HTTP/1.1 200 OK\n");
+    } else if (resCode == 404) {
+        strcpy(httpHeader, "HTTP/1.1 404 Not Found\n");
     } else {
         return (char*)0;
     }
@@ -138,12 +97,49 @@ void handle_client() {
 
     recv(client, req, 10000, 0);
 
+    std::string reqStdString = req;
+    std::string del = "\n";
+    std::vector<std::string> inReq = split_string(reqStdString, del);
+
+    char* firstSpace = strchr(inReq[0].c_str(), ' ');
+    char* lastSpace = strrchr(inReq[0].c_str(), ' ');
+
+    firstSpace[0] = (char)NULL;
+    lastSpace[0] = (char)NULL;
+    firstSpace++;
+
+    char filepath[500] = { 0 };
+    strcpy(filepath, "fs:/vol/external01");
+    strcat(filepath, firstSpace);
+
+    FILE *fptr = fopen(filepath, "r");
+
+    if (fptr == NULL) { // file could not be opened
+        char* head = http_response_head_builder(400,"text/html");
+
+        sprintf(res, "%s\n\n%s\n\n", head, HTTP_Not_Found_Res);
+        write(client, res, strlen(res));
+
+        close(client);
+
+        free(res);
+        free(req);
+        free(head);
+        connections++;
+        return;
+    }
+
     char* head = http_response_head_builder(200,"text/html");
-                
-    sprintf(res, "%s\n\n%s\n\n", head, req);
+
+    char myString[100]; 
+    fgets(myString, 100, fptr);
+
+    sprintf(res, "%s\n\n%s\n\n", head, myString);
 
     write(client, res, strlen(res));
+
     close(client);
+    fclose(fptr);
 
     free(res);
     free(req);
@@ -236,22 +232,6 @@ int initSocket() {
     return 0;
 }
 
-void get_local_ip() {
-    unsigned int nn_startupid;
-    ACInitialize();
-    ACGetStartupId(&nn_startupid);
-    ACConnectWithConfigId(nn_startupid);
-    ACGetAssignedAddress(&local_ip);
-    ACFinalize();
-    local_ip_string = (char*)malloc(20);
-    sprintf(local_ip_string, "%u.%u.%u.%u", 
-        (local_ip >> 24) & 0xFF,
-        (local_ip >> 16) & 0xFF,
-        (local_ip >>  8) & 0xFF,
-        (local_ip >>  0) & 0xFF
-    );
-}
-
 int main ( void ) {
     WHBProcInit(); // initialize Cafe OS stuff for us 😊
 
@@ -259,7 +239,7 @@ int main ( void ) {
     WHBLogUdpInit();
     WHBLogPrint("Starting HTTP server");
 
-    get_local_ip();
+    const char* local_ip_string = get_local_ip();
 
     if (initSocket()) {
         WHBLogPrint("Error initializing socket");
@@ -272,12 +252,24 @@ int main ( void ) {
 
 
     OSScreenInit(); // start graphics
-    init_buffers(); // init buffers for gamepad and tv
+    buf_struct_t bufs = init_buffers(); // init buffers for gamepad and tv
+    if (bufs.bufErr) { // error allocating buffers
+        return 1;
+    }
 
     // unsigned long connections = 0;
     char* connectionsString = (char*)malloc(50);
 
     std::thread HandleConnectionThread(handle_connection);
+
+    // FILE *fptr = fopen("fs:/vol/external01/test.txt", "r");
+
+    // // Store the content of the file
+    // char myString[100]; 
+
+    // fgets(myString, 100, fptr);
+
+    // fclose(fptr);
 
     while (WHBProcIsRunning()) { // main loop
 
@@ -292,14 +284,15 @@ int main ( void ) {
         }
 
         OSScreenPutFontEx(SCREEN_TV, 0, 0, "LillyHTTP ver. 0.3");
+        // OSScreenPutFontEx(SCREEN_TV, 0, 2, myString);
 
         sprintf(connectionsString, "Total connections: %ld", connections);
         OSScreenPutFontEx(SCREEN_DRC, 0, 0, connectionsString);
         OSScreenPutFontEx(SCREEN_DRC, 45, 0, local_ip_string);
         OSScreenPutFontEx(SCREEN_DRC, 0, 1, lastRes);
 
-        DCFlushRange(tvBuf, tvBufferSize);
-        DCFlushRange(padBuf, padBufferSize);
+        DCFlushRange(bufs.tvBuf, bufs.tvBufferSize);
+        DCFlushRange(bufs.padBuf, bufs.padBufferSize);
 
         // flip buffers to show graphics
         OSScreenFlipBuffersEx(SCREEN_TV);
@@ -311,16 +304,17 @@ int main ( void ) {
     shouldStopThread = true;
     HandleConnectionThread.join();
 
-    // this hangs for some reason 🙁
+    // this line hangs for some reason 🙁
+
     // OSScreenShutdown();
 
     WHBLogPrint("Quitting safely");
 
-    if (padBuf) free(padBuf);
-    if (tvBuf) free(tvBuf);
+    if (bufs.padBuf) free(bufs.padBuf);
+    if (bufs.tvBuf) free(bufs.tvBuf);
 
     free(connectionsString);
-    free(local_ip_string);
+    free((void*)local_ip_string);
     
     WHBLogCafeDeinit();
     WHBLogUdpDeinit();

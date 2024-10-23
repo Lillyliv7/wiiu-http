@@ -4,7 +4,10 @@ set(CMAKE_TOOLCHAIN_FILE $ENV{DEVKITPRO}/cmake/WiiU.cmake)
 project(helloworld_cpp CXX)
 
 add_executable(helloworld_cpp
-   main.cpp)
+   main.cpp
+   local_ip.cpp
+   split_string.cpp
+   os_screen_help.cpp)
 
 wut_create_rpx(helloworld_cpp)
 
