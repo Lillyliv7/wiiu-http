@@ -18,12 +18,28 @@ bool lastResWasCached = false;
 uint64_t currentCacheSize = 0; // in bytes
 std::unordered_map<std::string, cachedFile_t> fileCache;
 
+// to be called periodically, removes all expired cache entries
+void cull_cache() {
+    for (auto& pair : fileCache) {
+        if (curr_time - pair.second.cached_at > MAX_CACHE_AGE_SECONDS) {
+            // entry is too old, delete it
+
+            std::string filename = pair.first;
+            fileCache[filename].useable = false;
+            currentCacheSize-=pair.second.data_size;
+            free(fileCache[filename].data);
+            fileCache.erase(filename);
+        }
+    }
+}
+
 // false on fail
 bool add_cache_entry(char* filepath, uint64_t data_size, uint8_t* data) {
     if (currentCacheSize+data_size>MAX_CACHE_SIZE_BYTES) {
         // cache is full!
         return false;
     }
+    currentCacheSize += data_size;
 
     cachedFile_t cur_file;
     cur_file.accessed_at = curr_time;
@@ -67,7 +83,8 @@ fileResponseStruct_t read_file(const char* filename) {
         } else {
             // cache entry is too old, delete it
             fileCache[filename].useable = false;
-            uint64_t filesize = fileCache[filename].data_size;
+            currentCacheSize -= fileCache[filename].data_size;
+            // uint64_t filesize = fileCache[filename].data_size;
             free(fileCache[filename].data);
             fileCache.erase(filename);
         }
@@ -107,7 +124,7 @@ fileResponseStruct_t read_file(const char* filename) {
     fclose(fptr);
     free(filenameBuf);
 
-    res.data[res.data_size] = NULL; // prevent buffer overflow on bin files
+    res.data[res.data_size] = NULL;
 
     // add file to cache
     if (!add_cache_entry((char*)filename, res.data_size, res.data)) {

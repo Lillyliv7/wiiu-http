@@ -39,18 +39,8 @@
 #include "timestamp.hpp"
 
 #define PORT 80
-#define MAX_POLL_CLIENTS 5
 #define SOCKET_NONBLOCK false
 #define SERVER_IDENTIFIER "Server: LillyHTTP/0.2 (Wii U/CafeOS)\n"
-
-// struct clientStruct {
-//     int client_fd;
-//     struct sockaddr_in client_address;
-//     socklen_t client_addrlen;
-// }; typedef struct clientStruct clientStruct_t;
-
-// std::vector<clientStruct_t> clients;
-
 
 bool shouldStopThread = false;
 
@@ -113,6 +103,7 @@ int startsWith(const char *str, const char *prefix) {
 
 void handle_client() {
     int client = accept(server_fd, (struct sockaddr *)&address, (socklen_t *)&addrlen);
+
     char* req = (char*)malloc(10000);
     recv(client, req, 10000, 0);
 
@@ -177,51 +168,19 @@ void handle_client() {
 }
 
 void handle_connection() {
-    // struct pollfd fd[MAX_POLL_CLIENTS];
-    // for (unsigned int i = 0; i < MAX_POLL_CLIENTS; i++) {
-    //     fd[i].fd = server_fd;
-    //     fd[i].events = POLLIN;
-    // }
-
     while (shouldStopThread == false) {
         // poll connections
         struct pollfd fd;
         fd.fd = server_fd;
         fd.events = POLLIN;
 
-        // if (poll(fd, MAX_POLL_CLIENTS, 500 /* 0.5s */) == -1) {
         if (poll(&fd, 1, 500 /* 0.5s */) == -1) {
             poll_err = true;
         }
-
-        // loop through fd array and check for connection
-        // for (unsigned int i = 0; i < MAX_POLL_CLIENTS; i++) {
-            // if (fd[i].revents & POLLIN) {
             if (fd.revents & POLLIN) {
-                // int client = accept(server_fd, (struct sockaddr *)&address, (socklen_t *)&addrlen);
-
-                // // fix these mallocs at some point in time to prevent buffer overflow, quite easy to do here 😔
-                // char* req = (char*)malloc(10000);
-                // char* res = (char*)malloc(10000);
-
-                // recv(client, req, 10000, 0);
-
-                // char* head = http_response_head_builder(200,"text/html");
-                
-                // sprintf(res, "%s\n\n%s\n\n", head, req);
-
-                // write(client, res, strlen(res));
-                // close(client);
-
-                // free(res);
-                // free(req);
-                // free(head);
-                // connections++;
                 std::thread tempThread(handle_client);
                 tempThread.detach();
             }
-        // }
-        
     }
 }
 
@@ -286,35 +245,23 @@ int main ( void ) {
         return 1;
     }
 
-    // unsigned long connections = 0;
     char* connectionsString = (char*)malloc(50);
 
     std::thread HandleConnectionThread(handle_connection);
 
-    // FILE *fptr = fopen("fs:/vol/external01/test.txt", "r");
-
-    // // Store the content of the file
-    // char myString[100]; 
-
-    // fgets(myString, 100, fptr);
-
-    // fclose(fptr);
-    // curr_time =1;
-
     while (WHBProcIsRunning()) { // main loop
-
-        // struct timeval tv;
-
-        // gettimeofday(&tv,NULL);
-        // unsigned long long tme = tv.tv_sec;
-        get_curr_time();
+        get_curr_time(); // update global time variable
+        cull_cache();
 
         // clear screens
         OSScreenClearBufferEx(SCREEN_TV, 0); // 0 for clear to black
         OSScreenClearBufferEx(SCREEN_DRC, 0);
 
         char lastElapsedString[80] = {0};
-        sprintf(lastElapsedString, "timestamp2: %llu", curr_time);
+        sprintf(lastElapsedString, "timestamp: %llu", curr_time);
+
+        char cacheSizeString[80] = {0};
+        sprintf(cacheSizeString, "current cache size: %llu", currentCacheSize);
 
         if (flags_err) {
             OSScreenPutFontEx(SCREEN_TV, 0, 1, "Error setting socket to non-blocking mode");
@@ -323,13 +270,14 @@ int main ( void ) {
         }
 
         if (lastResWasCached) {
-            OSScreenPutFontEx(SCREEN_TV, 0, 3, "was cached");
+            OSScreenPutFontEx(SCREEN_TV, 0, 4, "was cached");
         } else {
-            OSScreenPutFontEx(SCREEN_TV, 0, 3, "was not cached");
+            OSScreenPutFontEx(SCREEN_TV, 0, 4, "was not cached");
         }
 
         OSScreenPutFontEx(SCREEN_TV, 0, 0, "LillyHTTP ver. 0.2");
         OSScreenPutFontEx(SCREEN_TV, 0, 2, lastElapsedString);
+        OSScreenPutFontEx(SCREEN_TV, 0, 3, cacheSizeString);
 
         sprintf(connectionsString, "Total connections: %ld", connections);
         OSScreenPutFontEx(SCREEN_DRC, 0, 0, connectionsString);

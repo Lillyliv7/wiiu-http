@@ -15,11 +15,12 @@
 
 
 // max age per file
-// if a file in the cache is older than 60 seconds it only gets reloaded from disk
+// if a file in the cache is older than 5 minutes it only gets reloaded from disk
 // when someone requests it to cut down on disk load
-#define MAX_CACHE_AGE_SECONDS 60
+#define MAX_CACHE_AGE_SECONDS 300
 
 extern bool lastResWasCached;
+extern uint64_t currentCacheSize;
 
 struct fileResponseStruct {
     bool read_fail; // true if failed
@@ -38,6 +39,10 @@ struct cachedFile {
     uint64_t data_size;
     uint8_t* data;
 }; typedef struct cachedFile cachedFile_t;
+
+
+// ran periodically, deletes expired cache entries
+void cull_cache();
 
 // self explanitory, returns false if failed to add to cache (not enough memory)
 bool add_cache_entry(char* filepath, uint64_t data_size, uint8_t* data);
