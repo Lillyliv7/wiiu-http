@@ -41,7 +41,7 @@
 #define PORT 80
 #define MAX_POLL_CLIENTS 5
 #define SOCKET_NONBLOCK false
-#define SERVER_IDENTIFIER "Server: LillyHTTP/0.1 (Wii U/CafeOS)\n"
+#define SERVER_IDENTIFIER "Server: LillyHTTP/0.2 (Wii U/CafeOS)\n"
 
 // struct clientStruct {
 //     int client_fd;
@@ -90,6 +90,8 @@ char* http_response_head_builder(int resCode, const char *content_type) {
 
     strcpy(lastRes, httpHeader);
 
+    strcat(httpHeader, "\n\n");
+
     return httpHeader;
 }
 
@@ -111,23 +113,18 @@ int startsWith(const char *str, const char *prefix) {
 
 void handle_client() {
     int client = accept(server_fd, (struct sockaddr *)&address, (socklen_t *)&addrlen);
-
-    // fix these mallocs at some point in time to prevent buffer overflow, quite easy to do here 😔
     char* req = (char*)malloc(10000);
-    char* res = (char*)malloc(10000);
-
     recv(client, req, 10000, 0);
 
     if(!startsWith(req, "GET")) {
-        // not a get request
+        // not a get request, send a 405
         char* head = http_response_head_builder(405,"text/html");
 
-        sprintf(res, "%s\n\n%s\n\n", head, HTTP_Not_Found_Res);
-        write(client, res, strlen(res));
+        write(client, head, strlen(head));
+        write(client, HTTP_Not_Found_Res, strlen(HTTP_Not_Found_Res));
 
         close(client);
 
-        free(res);
         free(req);
         free(head);
         connections++;
@@ -151,12 +148,11 @@ void handle_client() {
     if (fileRes.read_fail) {
         char* head = http_response_head_builder(404,"text/html");
 
-        sprintf(res, "%s\n\n%s\n\n", head, HTTP_Not_Found_Res);
-        write(client, res, strlen(res));
+        write(client, head, strlen(head));
+        write(client, HTTP_Not_Found_Res, strlen(HTTP_Not_Found_Res));
 
         close(client);
 
-        free(res);
         free(req);
         free(head);
         if (!fileRes.got_cached) free(fileRes.data);
@@ -166,21 +162,18 @@ void handle_client() {
     }
 
     char* head = http_response_head_builder(200,"text/html");
-    sprintf(res, "%s\n\n%s\n\n", head, fileRes.data);
 
-    write(client, res, strlen(res));
+    write(client, head, strlen(head));
+    write(client, fileRes.data, fileRes.data_size);
 
     close(client);
 
     // only free the data if it is not from the cache
     if (!fileRes.got_cached) free(fileRes.data);
 
-    free(res);
     free(req);
     free(head);
     connections++;
-    // long long end = timeInMilliseconds();
-    // elapsed = end-start;
 }
 
 void handle_connection() {
@@ -335,7 +328,7 @@ int main ( void ) {
             OSScreenPutFontEx(SCREEN_TV, 0, 3, "was not cached");
         }
 
-        OSScreenPutFontEx(SCREEN_TV, 0, 0, "LillyHTTP ver. 0.3");
+        OSScreenPutFontEx(SCREEN_TV, 0, 0, "LillyHTTP ver. 0.2");
         OSScreenPutFontEx(SCREEN_TV, 0, 2, lastElapsedString);
 
         sprintf(connectionsString, "Total connections: %ld", connections);

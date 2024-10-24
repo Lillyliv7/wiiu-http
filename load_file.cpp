@@ -81,12 +81,13 @@ fileResponseStruct_t read_file(const char* filename) {
     strcpy(filenameBuf, WWW_DIR);
     strcat(filenameBuf, filename);
 
-    FILE *fptr = fopen(filenameBuf, "rb");
+    FILE *fptr = fopen(filenameBuf, "r");
     // failed to read the file for some reason (probably because it doesnt exist)
     if (fptr == NULL) {
         free(filenameBuf);
 
         res.read_fail = true;
+        res.got_cached = false;
         res.data_size = 0;
         res.data = NULL;
 
@@ -98,11 +99,15 @@ fileResponseStruct_t read_file(const char* filename) {
     res.data_size = ftell(fptr);
     fseek(fptr, 0, SEEK_SET);
 
-    res.data = (uint8_t*)malloc(res.data_size);
+    res.data = (uint8_t*)malloc(res.data_size+1);
 
+
+    // fgets((char*)res.data, res.data_size, fptr);
     fread(res.data, res.data_size, 1, fptr);
     fclose(fptr);
     free(filenameBuf);
+
+    res.data[res.data_size] = NULL; // prevent buffer overflow on bin files
 
     // add file to cache
     if (!add_cache_entry((char*)filename, res.data_size, res.data)) {

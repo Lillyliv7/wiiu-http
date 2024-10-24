@@ -12,11 +12,12 @@
 
 // max size of the whole cache
 #define MAX_CACHE_SIZE_BYTES 100000
-// max age per file
 
+
+// max age per file
 // if a file in the cache is older than 60 seconds it only gets reloaded from disk
 // when someone requests it to cut down on disk load
-#define MAX_CACHE_AGE_SECONDS 6000
+#define MAX_CACHE_AGE_SECONDS 60
 
 extern bool lastResWasCached;
 
