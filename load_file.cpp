@@ -11,34 +11,59 @@
 
 #include "timestamp.hpp"
 
-// todo: implement auto culling of old cache entries instead of waiting for them to be accessed
-
 bool lastResWasCached = false;
 
 uint64_t currentCacheSize = 0; // in bytes
+unsigned long curr_cache_size = 0;
 std::unordered_map<std::string, cachedFile_t> fileCache;
+
+fileResponseStruct_t access_cache_entry(std::string filename) {
+    fileResponseStruct_t res;
+    res.read_fail = false;
+    res.got_cached = true;
+    lastResWasCached = true;
+    res.cache_age = fileCache[filename].cached_at;
+    fileCache[filename].accessed_at = curr_time;
+    res.data_size = fileCache[filename].data_size;
+    res.data = fileCache[filename].data;
+    return res;
+}
+
+void erase_cache_entry(std::string filename) {
+    fileCache[filename].useable = false;
+    currentCacheSize -= fileCache[filename].data_size;
+    free(fileCache[filename].data);
+    fileCache.erase(filename);
+}
 
 // to be called periodically, removes all expired cache entries
 void cull_cache() {
+    curr_cache_size = fileCache.size();
     for (auto& pair : fileCache) {
         if (curr_time - pair.second.cached_at > MAX_CACHE_AGE_SECONDS) {
             // entry is too old, delete it
 
-            std::string filename = pair.first;
-            fileCache[filename].useable = false;
-            currentCacheSize-=pair.second.data_size;
-            free(fileCache[filename].data);
-            fileCache.erase(filename);
+            erase_cache_entry(pair.first);
         }
     }
 }
 
 // false on fail
-bool add_cache_entry(char* filepath, uint64_t data_size, uint8_t* data) {
+bool add_cache_entry(std::string filepath, uint64_t data_size, uint8_t* data) {
     if (currentCacheSize+data_size>MAX_CACHE_SIZE_BYTES) {
         // cache is full!
         return false;
     }
+    auto element = fileCache.find(filepath);
+    if (!(element == fileCache.end())) {
+        // element already exists in cache
+
+        // the only way this should be possible to trigger is
+        // if someone accesses a file in the middle of it
+        // being removed from cache, which should be quite rare.
+        return false;
+    }
+
     currentCacheSize += data_size;
 
     cachedFile_t cur_file;
@@ -46,7 +71,7 @@ bool add_cache_entry(char* filepath, uint64_t data_size, uint8_t* data) {
     cur_file.cached_at = curr_time;
     cur_file.data = data;
     cur_file.data_size = data_size;
-    cur_file.filepath = filepath;
+    cur_file.filepath = (char*)filepath.c_str();
     cur_file.useable = true;
     fileCache[filepath] = cur_file;
 
@@ -72,21 +97,12 @@ fileResponseStruct_t read_file(const char* filename) {
         // check cache entry age
         if (!(curr_time - fileCache[filename].cached_at > MAX_CACHE_AGE_SECONDS) && fileCache[filename].useable) {
             // cache entry isnt too old, use it
-            fileCache[filename].accessed_at = curr_time;
 
-            res.cache_age = fileCache[filename].cached_at;
-            res.data_size = fileCache[filename].data_size;
-            res.data = fileCache[filename].data;
-            res.got_cached = true;
-
-            return res;
+            return access_cache_entry(filenameSTDString);
         } else {
             // cache entry is too old, delete it
-            fileCache[filename].useable = false;
-            currentCacheSize -= fileCache[filename].data_size;
-            // uint64_t filesize = fileCache[filename].data_size;
-            free(fileCache[filename].data);
-            fileCache.erase(filename);
+
+            erase_cache_entry(filenameSTDString);
         }
 
     }

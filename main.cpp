@@ -1,5 +1,7 @@
 // http server for the wii u written in c
 
+// todo: improve displaying of info on tv and gamepad
+
 #include <malloc.h>
 #include <stdbool.h>
 #include <stdint.h>
@@ -258,7 +260,7 @@ int main ( void ) {
         OSScreenClearBufferEx(SCREEN_DRC, 0);
 
         char lastElapsedString[80] = {0};
-        sprintf(lastElapsedString, "timestamp: %llu", curr_time);
+        sprintf(lastElapsedString, "timestamp: %lu", curr_cache_size);
 
         char cacheSizeString[80] = {0};
         sprintf(cacheSizeString, "current cache size: %llu", currentCacheSize);
