@@ -14,7 +14,8 @@
 bool lastResWasCached = false;
 
 uint64_t currentCacheSize = 0; // in bytes
-unsigned long curr_cache_size = 0;
+unsigned long curr_cache_size = 0; // in elements
+unsigned long long last_file_size = 0;
 std::unordered_map<std::string, cachedFile_t> fileCache;
 
 fileResponseStruct_t access_cache_entry(std::string filename) {
@@ -130,17 +131,16 @@ fileResponseStruct_t read_file(const char* filename) {
     // get file size and put in res.data_size
     fseek(fptr, 0, SEEK_END);
     res.data_size = ftell(fptr);
+    last_file_size = res.data_size;
     fseek(fptr, 0, SEEK_SET);
 
     res.data = (uint8_t*)malloc(res.data_size+1);
 
-
-    // fgets((char*)res.data, res.data_size, fptr);
     fread(res.data, res.data_size, 1, fptr);
     fclose(fptr);
     free(filenameBuf);
 
-    res.data[res.data_size] = NULL;
+    // res.data[res.data_size] = NULL;
 
     // add file to cache
     if (!add_cache_entry((char*)filename, res.data_size, res.data)) {

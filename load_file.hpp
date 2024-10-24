@@ -20,6 +20,7 @@
 extern bool lastResWasCached;
 extern uint64_t currentCacheSize;
 extern unsigned long curr_cache_size;
+extern unsigned long long last_file_size;
 
 struct fileResponseStruct {
     bool read_fail; // true if failed

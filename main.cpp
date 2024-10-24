@@ -39,6 +39,7 @@
 #include "os_screen_help.hpp"
 #include "load_file.hpp"
 #include "timestamp.hpp"
+#include "http.hpp"
 
 #define PORT 80
 #define SOCKET_NONBLOCK false
@@ -75,6 +76,7 @@ char* http_response_head_builder(int resCode, const char *content_type) {
 
     strcat(httpHeader, SERVER_IDENTIFIER);
     // set Accept-Ranges to "bytes" if we are to ever enable partial downloading of files
+    strcat(httpHeader, "Content-Length: 100000\n"); 
     strcat(httpHeader, "Accept-Ranges: none\n"); 
     strcat(httpHeader, "Connection: close\n");
     strcat(httpHeader, "Content-Type: ");
@@ -154,7 +156,7 @@ void handle_client() {
         return;
     }
 
-    char* head = http_response_head_builder(200,"text/html");
+    char* head = http_response_head_builder(200,get_MIME_from_filename(firstSpace).c_str());
 
     write(client, head, strlen(head));
     write(client, fileRes.data, fileRes.data_size);
@@ -176,7 +178,7 @@ void handle_connection() {
         fd.fd = server_fd;
         fd.events = POLLIN;
 
-        if (poll(&fd, 1, 500 /* 0.5s */) == -1) {
+        if (poll(&fd, 1, 5000 /* 0.5s */) == -1) {
             poll_err = true;
         }
             if (fd.revents & POLLIN) {
@@ -260,7 +262,7 @@ int main ( void ) {
         OSScreenClearBufferEx(SCREEN_DRC, 0);
 
         char cacheEntriesString[80] = {0};
-        sprintf(cacheEntriesString, "cache entries: %lu", curr_cache_size);
+        sprintf(cacheEntriesString, "cache entries: %llu", curr_cache_size);
 
         char cacheSizeString[80] = {0};
         sprintf(cacheSizeString, "current cache size (bytes): %llu", currentCacheSize);

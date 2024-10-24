@@ -9,7 +9,8 @@ add_executable(helloworld_cpp
    split_string.cpp
    os_screen_help.cpp
    load_file.cpp
-   timestamp.cpp)
+   timestamp.cpp
+   http.cpp)
 
 wut_create_rpx(helloworld_cpp)
 
