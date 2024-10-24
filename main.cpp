@@ -259,11 +259,11 @@ int main ( void ) {
         OSScreenClearBufferEx(SCREEN_TV, 0); // 0 for clear to black
         OSScreenClearBufferEx(SCREEN_DRC, 0);
 
-        char lastElapsedString[80] = {0};
-        sprintf(lastElapsedString, "timestamp: %lu", curr_cache_size);
+        char cacheEntriesString[80] = {0};
+        sprintf(cacheEntriesString, "cache entries: %lu", curr_cache_size);
 
         char cacheSizeString[80] = {0};
-        sprintf(cacheSizeString, "current cache size: %llu", currentCacheSize);
+        sprintf(cacheSizeString, "current cache size (bytes): %llu", currentCacheSize);
 
         if (flags_err) {
             OSScreenPutFontEx(SCREEN_TV, 0, 1, "Error setting socket to non-blocking mode");
@@ -272,13 +272,13 @@ int main ( void ) {
         }
 
         if (lastResWasCached) {
-            OSScreenPutFontEx(SCREEN_TV, 0, 4, "was cached");
+            OSScreenPutFontEx(SCREEN_TV, 0, 4, "last request was cached");
         } else {
-            OSScreenPutFontEx(SCREEN_TV, 0, 4, "was not cached");
+            OSScreenPutFontEx(SCREEN_TV, 0, 4, "last request was not cached");
         }
 
         OSScreenPutFontEx(SCREEN_TV, 0, 0, "LillyHTTP ver. 0.2");
-        OSScreenPutFontEx(SCREEN_TV, 0, 2, lastElapsedString);
+        OSScreenPutFontEx(SCREEN_TV, 0, 2, cacheEntriesString);
         OSScreenPutFontEx(SCREEN_TV, 0, 3, cacheSizeString);
 
         sprintf(connectionsString, "Total connections: %ld", connections);
