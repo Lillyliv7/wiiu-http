@@ -8,8 +8,8 @@
 // (root of sd card should always be "fs:/vol/external01")
 #define WWW_DIR "fs:/vol/external01/www"
 
-// max size of the whole cache
-#define MAX_CACHE_SIZE_BYTES 100000
+// max size of the whole cache (1mb)
+#define MAX_CACHE_SIZE_BYTES 1000000
 
 
 // max age per file
@@ -19,7 +19,7 @@
 
 extern bool lastResWasCached;
 extern uint64_t currentCacheSize;
-extern unsigned long curr_cache_size;
+extern uint64_t curr_cache_size;
 extern unsigned long long last_file_size;
 
 struct fileResponseStruct {

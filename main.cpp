@@ -76,7 +76,7 @@ char* http_response_head_builder(int resCode, const char *content_type) {
 
     strcat(httpHeader, SERVER_IDENTIFIER);
     // set Accept-Ranges to "bytes" if we are to ever enable partial downloading of files
-    strcat(httpHeader, "Content-Length: 100000\n"); 
+    // strcat(httpHeader, "Content-Length: 100000\n"); 
     strcat(httpHeader, "Accept-Ranges: none\n"); 
     strcat(httpHeader, "Connection: close\n");
     strcat(httpHeader, "Content-Type: ");
@@ -159,7 +159,18 @@ void handle_client() {
     char* head = http_response_head_builder(200,get_MIME_from_filename(firstSpace).c_str());
 
     write(client, head, strlen(head));
-    write(client, fileRes.data, fileRes.data_size);
+
+    int64_t i = 0;
+    int64_t size = fileRes.data_size;
+    while (true) {
+        if (size<500) {
+            write(client, fileRes.data+i, size);
+            break;
+        }
+        write(client, fileRes.data+i, 500);
+        size-=500;
+        i+=500;
+    }
 
     close(client);
 
@@ -178,7 +189,7 @@ void handle_connection() {
         fd.fd = server_fd;
         fd.events = POLLIN;
 
-        if (poll(&fd, 1, 5000 /* 0.5s */) == -1) {
+        if (poll(&fd, 1, 500 /* 0.5s */) == -1) {
             poll_err = true;
         }
             if (fd.revents & POLLIN) {
@@ -279,7 +290,7 @@ int main ( void ) {
             OSScreenPutFontEx(SCREEN_TV, 0, 4, "last request was not cached");
         }
 
-        OSScreenPutFontEx(SCREEN_TV, 0, 0, "LillyHTTP ver. 0.2");
+        OSScreenPutFontEx(SCREEN_TV, 0, 0, "LillyHTTP ver. 0.3");
         OSScreenPutFontEx(SCREEN_TV, 0, 2, cacheEntriesString);
         OSScreenPutFontEx(SCREEN_TV, 0, 3, cacheSizeString);
 

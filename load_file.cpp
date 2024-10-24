@@ -14,7 +14,7 @@
 bool lastResWasCached = false;
 
 uint64_t currentCacheSize = 0; // in bytes
-unsigned long curr_cache_size = 0; // in elements
+uint64_t curr_cache_size = 0; // in elements
 unsigned long long last_file_size = 0;
 std::unordered_map<std::string, cachedFile_t> fileCache;
 
