@@ -25,6 +25,7 @@
 #include <poll.h>
 #include <errno.h>
 #include <dirent.h>
+#include <sys/time.h>
 
 #include <thread>
 #include <vector>
@@ -35,6 +36,7 @@
 #include "split_string.hpp"
 #include "os_screen_help.hpp"
 #include "load_file.hpp"
+#include "timestamp.hpp"
 
 #define PORT 80
 #define MAX_POLL_CLIENTS 5
@@ -73,6 +75,8 @@ char* http_response_head_builder(int resCode, const char *content_type) {
         strcpy(httpHeader, "HTTP/1.1 200 OK\n");
     } else if (resCode == 404) {
         strcpy(httpHeader, "HTTP/1.1 404 Not Found\n");
+    } else if (resCode == 405) {
+        strcpy(httpHeader, "HTTP/1.1 405 Method Not Allowed\n");
     } else {
         return (char*)0;
     }
@@ -89,6 +93,22 @@ char* http_response_head_builder(int resCode, const char *content_type) {
     return httpHeader;
 }
 
+void get_curr_time(void) {
+    struct timeval tv;
+
+    gettimeofday(&tv,NULL);
+    curr_time = tv.tv_sec;
+}
+
+int startsWith(const char *str, const char *prefix) {
+    // Check if the length of the prefix is greater than the string length
+    if (strlen(prefix) > strlen(str)) {
+        return 0;
+    }
+    // Compare the prefix with the start of the string
+    return strncmp(str, prefix, strlen(prefix)) == 0;
+}
+
 void handle_client() {
     int client = accept(server_fd, (struct sockaddr *)&address, (socklen_t *)&addrlen);
 
@@ -97,6 +117,23 @@ void handle_client() {
     char* res = (char*)malloc(10000);
 
     recv(client, req, 10000, 0);
+
+    if(!startsWith(req, "GET")) {
+        // not a get request
+        char* head = http_response_head_builder(405,"text/html");
+
+        sprintf(res, "%s\n\n%s\n\n", head, HTTP_Not_Found_Res);
+        write(client, res, strlen(res));
+
+        close(client);
+
+        free(res);
+        free(req);
+        free(head);
+        connections++;
+        lastResWasCached = false;
+        return;
+    }
 
     std::string reqStdString = req;
     std::string del = "\n";
@@ -112,7 +149,7 @@ void handle_client() {
     fileResponseStruct_t fileRes = read_file(firstSpace);
 
     if (fileRes.read_fail) {
-        char* head = http_response_head_builder(400,"text/html");
+        char* head = http_response_head_builder(404,"text/html");
 
         sprintf(res, "%s\n\n%s\n\n", head, HTTP_Not_Found_Res);
         write(client, res, strlen(res));
@@ -122,8 +159,9 @@ void handle_client() {
         free(res);
         free(req);
         free(head);
-        free(fileRes.data);
+        if (!fileRes.got_cached) free(fileRes.data);
         connections++;
+        lastResWasCached = false;
         return;
     }
 
@@ -134,11 +172,15 @@ void handle_client() {
 
     close(client);
 
-    free(fileRes.data);
+    // only free the data if it is not from the cache
+    if (!fileRes.got_cached) free(fileRes.data);
+
     free(res);
     free(req);
     free(head);
     connections++;
+    // long long end = timeInMilliseconds();
+    // elapsed = end-start;
 }
 
 void handle_connection() {
@@ -264,12 +306,22 @@ int main ( void ) {
     // fgets(myString, 100, fptr);
 
     // fclose(fptr);
+    // curr_time =1;
 
     while (WHBProcIsRunning()) { // main loop
+
+        // struct timeval tv;
+
+        // gettimeofday(&tv,NULL);
+        // unsigned long long tme = tv.tv_sec;
+        get_curr_time();
 
         // clear screens
         OSScreenClearBufferEx(SCREEN_TV, 0); // 0 for clear to black
         OSScreenClearBufferEx(SCREEN_DRC, 0);
+
+        char lastElapsedString[80] = {0};
+        sprintf(lastElapsedString, "timestamp2: %llu", curr_time);
 
         if (flags_err) {
             OSScreenPutFontEx(SCREEN_TV, 0, 1, "Error setting socket to non-blocking mode");
@@ -277,8 +329,14 @@ int main ( void ) {
             OSScreenPutFontEx(SCREEN_TV, 0, 1, "Poll() error");
         }
 
+        if (lastResWasCached) {
+            OSScreenPutFontEx(SCREEN_TV, 0, 3, "was cached");
+        } else {
+            OSScreenPutFontEx(SCREEN_TV, 0, 3, "was not cached");
+        }
+
         OSScreenPutFontEx(SCREEN_TV, 0, 0, "LillyHTTP ver. 0.3");
-        // OSScreenPutFontEx(SCREEN_TV, 0, 2, myString);
+        OSScreenPutFontEx(SCREEN_TV, 0, 2, lastElapsedString);
 
         sprintf(connectionsString, "Total connections: %ld", connections);
         OSScreenPutFontEx(SCREEN_DRC, 0, 0, connectionsString);
@@ -297,6 +355,8 @@ int main ( void ) {
 
     shouldStopThread = true;
     HandleConnectionThread.join();
+
+    close(server_fd);
 
     // this line hangs for some reason 🙁
 
