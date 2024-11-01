@@ -140,8 +140,6 @@ fileResponseStruct_t read_file(const char* filename) {
     fclose(fptr);
     free(filenameBuf);
 
-    // res.data[res.data_size] = NULL;
-
     // add file to cache
     if (!add_cache_entry((char*)filename, res.data_size, res.data)) {
         res.got_cached = false;

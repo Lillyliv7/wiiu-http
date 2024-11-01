@@ -1,4 +1,5 @@
 #include <stdint.h>
+#include <sys/time.h>
 
 #include "timestamp.hpp"
 
@@ -7,3 +8,10 @@
 // to save a little processing power
 
 uint64_t curr_time = 0;
+
+void get_curr_time(void) {
+    struct timeval tv;
+
+    gettimeofday(&tv,NULL);
+    curr_time = tv.tv_sec;
+}

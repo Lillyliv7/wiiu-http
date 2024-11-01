@@ -40,6 +40,7 @@
 #include "load_file.hpp"
 #include "timestamp.hpp"
 #include "http.hpp"
+#include "string_startswith.hpp"
 
 #define PORT 80
 #define SOCKET_NONBLOCK false
@@ -89,30 +90,20 @@ char* http_response_head_builder(int resCode, const char *content_type) {
     return httpHeader;
 }
 
-void get_curr_time(void) {
-    struct timeval tv;
-
-    gettimeofday(&tv,NULL);
-    curr_time = tv.tv_sec;
-}
-
-int startsWith(const char *str, const char *prefix) {
-    // Check if the length of the prefix is greater than the string length
-    if (strlen(prefix) > strlen(str)) {
-        return 0;
-    }
-    // Compare the prefix with the start of the string
-    return strncmp(str, prefix, strlen(prefix)) == 0;
-}
 
 void handle_client() {
     int client = accept(server_fd, (struct sockaddr *)&address, (socklen_t *)&addrlen);
 
     char* req = (char*)malloc(10000);
     recv(client, req, 10000, 0);
+    std::string reqStdstr = req;
+    std::unordered_map<std::string, std::string> reqMap = LHTTP::get_HTTP_req_params(reqStdstr);
 
-    if(!startsWith(req, "GET")) {
-        // not a get request, send a 405
+    auto httpMethodElement = reqMap.find("ReqMethod");
+    if(httpMethodElement == reqMap.end()) {
+        // empty map, user submitted an invalid request or get_HTTP_req_params broke
+        // return error page
+
         char* head = http_response_head_builder(405,"text/html");
 
         write(client, head, strlen(head));
@@ -127,18 +118,7 @@ void handle_client() {
         return;
     }
 
-    std::string reqStdString = req;
-    std::string del = "\n";
-    std::vector<std::string> inReq = split_string(reqStdString, del);
-
-    char* firstSpace = strchr(inReq[0].c_str(), ' ');
-    char* lastSpace = strrchr(inReq[0].c_str(), ' ');
-
-    firstSpace[0] = (char)NULL;
-    lastSpace[0] = (char)NULL;
-    firstSpace++;
-
-    fileResponseStruct_t fileRes = read_file(firstSpace);
+    fileResponseStruct_t fileRes = read_file(reqMap["ReqPath"].c_str());
 
     if (fileRes.read_fail) {
         char* head = http_response_head_builder(404,"text/html");
@@ -156,7 +136,7 @@ void handle_client() {
         return;
     }
 
-    char* head = http_response_head_builder(200,get_MIME_from_filename(firstSpace).c_str());
+    char* head = http_response_head_builder(200,LHTTP::get_MIME_from_filename(reqMap["ReqPath"]).c_str());
 
     write(client, head, strlen(head));
 
@@ -174,13 +154,16 @@ void handle_client() {
 
     close(client);
 
-    // only free the data if it is not from the cache
+    // only free the data if it is not from the cache,
+    // if the data is in the cache, it will get cleared
+    // automatically when the entry expires
     if (!fileRes.got_cached) free(fileRes.data);
 
     free(req);
     free(head);
     connections++;
 }
+
 
 void handle_connection() {
     while (shouldStopThread == false) {
@@ -315,7 +298,6 @@ int main ( void ) {
     close(server_fd);
 
     // this line hangs for some reason 🙁
-
     // OSScreenShutdown();
 
     WHBLogPrint("Quitting safely");
@@ -324,7 +306,6 @@ int main ( void ) {
     if (bufs.tvBuf) free(bufs.tvBuf);
 
     free(connectionsString);
-    free((void*)local_ip_string);
     
     WHBLogCafeDeinit();
     WHBLogUdpDeinit();
